@@ -1,0 +1,611 @@
+openapi: 3.0.3
+info:
+  title: SNS投稿ジェネレーターAPI
+  description: SNS投稿を自動生成・管理・収益化するためのAPI仕様書
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+    description: 本番環境
+
+paths:
+  /auth/register:
+    post:
+      summary: 新規ユーザー登録
+      description: |
+        ユーザーがアカウントを新規作成するためのAPI。リクエスト時に`plan`を選択する。
+        - plan=freeの場合：ユーザーを無料プランでDB登録し、そのまま利用開始。
+        - plan=starter/premiumの場合：ユーザー情報を一時保存し、Stripe CheckoutセッションURLを返却。ユーザーは決済画面へリダイレクトされる。決済完了後、WebhookからDB登録＆有料プラン有効化。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - plan
+              properties:
+                email:
+                  type: string
+                  example: "sample@example.com"
+                password:
+                  type: string
+                  example: "pass1234"
+                plan:
+                  type: string
+                  description: プラン種類（free, starter, premium）
+                  example: "starter"
+      responses:
+        '200':
+          description: |
+            無料プラン：そのまま利用開始。
+            有料プラン：Stripe Checkout画面のURL返却（クライアント側でリダイレクト）。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_url:
+                    type: string
+                    description: Stripe Checkout URL（有料プラン時のみ返却）
+                  message:
+                    type: string
+                    example: "Registration complete. Please proceed to payment if you selected a paid plan."
+        '400':
+          description: | 
+            入力値が不足・不正な場合。 
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid email or password."
+
+  /auth/login:
+    post:
+      summary: ユーザーログイン（JWT発行）
+      description: |
+        メールとパスワードでログイン認証し、成功時にJWTトークンを返す。以後のAPI認証はトークンをAuthorizationヘッダーで送信することで行う。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: "sample@example.com"
+                password:
+                  type: string
+                  example: "pass1234"
+      responses:
+        '200':
+          description: |
+            ログイン成功。JWTトークン返却。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOi..."
+                  user:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                        example: "sample@example.com"
+                      plan:
+                        type: string
+                        example: "free"
+        '401':
+          description: 認証失敗。メール・パスワード不一致など。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid credentials."
+
+  /auth/me:
+    post:
+      summary: ログイン中のユーザー情報取得
+      description: |
+        JWTトークンに基づき、現在認証されているユーザーの詳細情報を返す。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: ユーザー情報
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: string
+                    example: "sample@example.com"
+                  plan:
+                    type: string
+                    example: "free"
+                  id:
+                    type: string
+                    example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+  /posts/generate:
+    post:
+      summary: 投稿を生成
+      description: |
+        SNS投稿生成リクエスト。
+        - 入力条件（ジャンル、形式、トーン、備考）に合わせた投稿文を生成。
+        - 月間出力回数の残数を内部でチェックし、超過時はエラー返却。
+        - 生成した投稿文と使用したプロンプトも返却。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+            examples:
+              example1:
+                value:
+                  genre: "副業"
+                  format: "x"
+                  tone: "カジュアル"
+                  memo: "借金返済エピソードを入れて"
+      responses:
+        '200':
+          description: 生成された投稿
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+              examples:
+                example1:
+                  value:
+                    result: "副業で人生が変わった話…"
+                    prompt_used: "ジャンルは副業…"
+        '403':
+          description: 出力回数上限など、制限違反時のエラー。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Output limit exceeded."
+
+  /posts/history:
+    post:
+      summary: 投稿履歴一覧取得
+      description: |
+        ログイン中ユーザーが生成した投稿の履歴一覧を返す。
+        - ページングパラメータで過去投稿を分割取得。
+        - deleted = false のみ返却。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 10
+      responses:
+        '200':
+          description: 投稿履歴（降順）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        content:
+                          type: string
+                        format:
+                          type: string
+                        genre:
+                          type: string
+                        tone:
+                          type: string
+                        created_at:
+                          type: string
+                          example: "2025-05-30T14:32:00Z"
+                  hasMore:
+                    type: boolean
+                example:
+                  posts:
+                    - id: "uuid1"
+                      content: "副業で人生が変わった話…"
+                      format: "x"
+                      genre: "副業"
+                      tone: "カジュアル"
+                      created_at: "2025-05-30T14:32:00Z"
+                  hasMore: true
+
+  /posts/history/{id}:
+    post:
+      summary: 投稿履歴詳細取得
+      description: |
+        指定IDの投稿履歴を詳細取得。ユーザー自身の投稿のみアクセス可。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 投稿詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  content:
+                    type: string
+                  format:
+                    type: string
+                  genre:
+                    type: string
+                  tone:
+                    type: string
+                  prompt_used:
+                    type: string
+                  created_at:
+                    type: string
+                    example: "2025-05-30T14:32:00Z"
+        '403':
+          description: 他ユーザーの投稿の場合エラー
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Access denied."
+
+  /posts/history/delete/{id}:
+    post:
+      summary: 投稿履歴の論理削除
+      description: |
+        指定IDの投稿履歴を論理削除（deleted = true）。ユーザー自身の投稿のみ削除可。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '403':
+          description: 他ユーザーの投稿の場合エラー
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Access denied."
+
+  /themes:
+    post:
+      summary: テーマ一覧取得
+      description: |
+        ユーザーが利用可能なテーマ一覧を取得。
+        - 無料会員はプリセット5テーマのみ取得。
+        - 有料会員は自身の保存テーマも含めて取得。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: テーマ一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  themes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Theme'
+
+  /themes/create:
+    post:
+      summary: 新しいテーマの作成
+      description: |
+        有料会員が自身のテーマを新規保存。
+        - 5件まで保存可能（制限値はシステムで制御）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Theme'
+            example:
+              name: "マリンブルー"
+              bg_color: "#002244"
+              text_color: "#ffffff"
+              accent_color: "#00bcd4"
+      responses:
+        '200':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  theme_id:
+                    type: string
+                    example: "uuid"
+
+  /themes/update/{id}:
+    post:
+      summary: テーマの更新
+      description: |
+        有料会員が自身の保存テーマを更新。
+        - 他人のテーマやプリセットテーマは更新不可。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Theme'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '403':
+          description: 他ユーザーやプリセットのテーマを更新しようとした場合
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Access denied."
+
+  /themes/delete/{id}:
+    post:
+      summary: テーマの削除
+      description: |
+        有料会員が自身の保存テーマを削除（論理 or 物理削除）。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '403':
+          description: 他ユーザーやプリセットのテーマを削除しようとした場合
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Access denied."
+
+  /plans:
+    post:
+      summary: プラン一覧取得
+      description: |
+        利用可能なプラン（free, starter, premium）を返却。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: プラン情報一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        price:
+                          type: integer
+                        description:
+                          type: string
+
+  /plans/subscribe:
+    post:
+      summary: プラン登録（Stripe Checkout）
+      description: |
+        有料プランへ変更したい場合にStripe CheckoutセッションURLを生成し返却。
+        - フロント側でこのURLに遷移し決済処理
+        - 決済完了後、Webhookでプラン情報更新
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  description: 変更後のプラン種別（starter, premium）
+      responses:
+        '200':
+          description: Stripe Checkout用のセッションURL返却
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_url:
+                    type: string
+                    example: "https://checkout.stripe.com/pay/cs_test..."
+        '400':
+          description: | 
+            既に有料プランの場合やリクエストエラー。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Already on a paid plan."
+
+  /stripe/webhook:
+    post:
+      summary: Stripe Webhook受信
+      description: |
+        Stripeからの決済関連通知を受信。
+        - checkout.session.completed で有料プラン有効化。
+        - invoice.payment_failed で警告または一時停止。
+        - 解約などのイベントにも対応。
+        - セキュリティ強化のため署名検証必須。
+      responses:
+        '200':
+          description: 通知受領
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    GenerateRequest:
+      type: object
+      properties:
+        genre:
+          type: string
+          description: 投稿ジャンル
+          example: "副業"
+        format:
+          type: string
+          description: 投稿形式（x, reel, youtube など）
+          example: "x"
+        tone:
+          type: string
+          description: 出力トーン
+          example: "カジュアル"
+        memo:
+          type: string
+          description: 補足・こだわりメモ
+          example: "借金返済エピソードを入れて"
+
+    GenerateResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          description: 生成された投稿文
+        prompt_used:
+          type: string
+          description: 実際に使われたプロンプト
+
+    Theme:
+      type: object
+      properties:
+        name:
+          type: string
+          description: テーマ名
+          example: "夜モード"
+        bg_color:
+          type: string
+          description: 背景色HEX
+          example: "#1f1f1f"
+        text_color:
+          type: string
+          description: テキスト色HEX
+          example: "#ffffff"
+        accent_color:
+          type: string
+          description: アクセント色HEX
+          example: "#ff4081"

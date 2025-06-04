@@ -41,20 +41,20 @@ async function handleGenerate() {
   <h1 class="text-2xl font-bold mb-6">SNS投稿を生成</h1>
   <form class="space-y-4" on:submit|preventDefault={handleGenerate}>
     <div>
-      <label class="block font-medium mb-1">ジャンル</label>
-      <input class="input input-bordered w-full" bind:value={genre} required />
+      <label for="genre" class="block font-medium mb-1">ジャンル</label>
+      <input id="genre" class="input input-bordered w-full" bind:value={genre} required />
     </div>
     <div>
-      <label class="block font-medium mb-1">形式</label>
-      <input class="input input-bordered w-full" bind:value={format} required />
+      <label for="format" class="block font-medium mb-1">形式</label>
+      <input id="format" class="input input-bordered w-full" bind:value={format} required />
     </div>
     <div>
-      <label class="block font-medium mb-1">トーン</label>
-      <input class="input input-bordered w-full" bind:value={tone} required />
+      <label for="tone" class="block font-medium mb-1">トーン</label>
+      <input id="tone" class="input input-bordered w-full" bind:value={tone} required />
     </div>
     <div>
-      <label class="block font-medium mb-1">備考</label>
-      <textarea class="input input-bordered w-full" bind:value={memo} rows="2" />
+      <label for="memo" class="block font-medium mb-1">備考</label>
+      <textarea id="memo" class="input input-bordered w-full" bind:value={memo} rows="2"></textarea>
     </div>
     <button class="btn btn-primary w-full" type="submit" disabled={loading}>
       {loading ? '生成中...' : '生成する'}

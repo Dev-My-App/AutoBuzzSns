@@ -37,38 +37,72 @@ async function handleGenerate() {
 }
 </script>
 
-<div class="max-w-xl mx-auto py-10 px-4">
-  <h1 class="text-2xl font-bold mb-6">SNS投稿を生成</h1>
-  <form class="space-y-4" on:submit|preventDefault={handleGenerate}>
-    <div>
-      <label for="genre" class="block font-medium mb-1">ジャンル</label>
-      <input id="genre" class="input input-bordered w-full" bind:value={genre} required />
+<div class="w-full max-w-none sm:max-w-lg lg:max-w-xl mx-auto py-6 sm:py-10 px-4">
+  <h1 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">SNS投稿を生成</h1>
+  <form class="space-y-4 sm:space-y-6" on:submit|preventDefault={handleGenerate}>
+    <div class="space-y-4">
+      <div>
+        <label for="genre" class="block text-sm font-medium text-gray-700 mb-2">ジャンル</label>
+        <input 
+          id="genre" 
+          class="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm sm:text-base" 
+          bind:value={genre} 
+          required 
+          placeholder="例: テクノロジー、ライフスタイル"
+        />
+      </div>
+      <div>
+        <label for="format" class="block text-sm font-medium text-gray-700 mb-2">形式</label>
+        <input 
+          id="format" 
+          class="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm sm:text-base" 
+          bind:value={format} 
+          required 
+          placeholder="例: リスト形式、ストーリー形式"
+        />
+      </div>
+      <div>
+        <label for="tone" class="block text-sm font-medium text-gray-700 mb-2">トーン</label>
+        <input 
+          id="tone" 
+          class="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm sm:text-base" 
+          bind:value={tone} 
+          required 
+          placeholder="例: カジュアル、プロフェッショナル"
+        />
+      </div>
+      <div>
+        <label for="memo" class="block text-sm font-medium text-gray-700 mb-2">備考</label>
+        <textarea 
+          id="memo" 
+          class="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm sm:text-base resize-none" 
+          bind:value={memo} 
+          rows="3"
+          placeholder="追加の要望があれば記入してください"
+        ></textarea>
+      </div>
     </div>
-    <div>
-      <label for="format" class="block font-medium mb-1">形式</label>
-      <input id="format" class="input input-bordered w-full" bind:value={format} required />
-    </div>
-    <div>
-      <label for="tone" class="block font-medium mb-1">トーン</label>
-      <input id="tone" class="input input-bordered w-full" bind:value={tone} required />
-    </div>
-    <div>
-      <label for="memo" class="block font-medium mb-1">備考</label>
-      <textarea id="memo" class="input input-bordered w-full" bind:value={memo} rows="2"></textarea>
-    </div>
-    <button class="btn btn-primary w-full" type="submit" disabled={loading}>
+    <button 
+      class="w-full bg-blue-600 text-white px-4 py-3 sm:py-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm sm:text-base" 
+      type="submit" 
+      disabled={loading}
+    >
       {loading ? '生成中...' : '生成する'}
     </button>
   </form>
   {#if error}
-    <div class="mt-4 text-red-600">{error}</div>
+    <div class="mt-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+      <p class="text-red-600 text-sm sm:text-base">{error}</p>
+    </div>
   {/if}
   {#if result}
-    <div class="mt-8 p-4 bg-gray-50 rounded shadow">
-      <div class="font-bold mb-2">生成結果</div>
-      <div class="whitespace-pre-line">{result}</div>
+    <div class="mt-6 sm:mt-8 p-4 sm:p-6 bg-gray-50 rounded-lg border border-gray-200">
+      <div class="font-semibold mb-3 text-gray-900 text-sm sm:text-base">生成結果</div>
+      <div class="whitespace-pre-line text-gray-800 text-sm sm:text-base leading-relaxed">{result}</div>
       {#if promptUsed}
-        <div class="mt-2 text-xs text-gray-500">プロンプト: {promptUsed}</div>
+        <div class="mt-3 pt-3 border-t border-gray-200">
+          <p class="text-xs sm:text-sm text-gray-500">プロンプト: {promptUsed}</p>
+        </div>
       {/if}
     </div>
   {/if}
